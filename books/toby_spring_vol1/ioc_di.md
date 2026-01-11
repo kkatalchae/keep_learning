@@ -266,8 +266,74 @@ public class MemoryUserRepository implements UserRepository {
 → 이 순간 UserService는 실제로 JpaUserRepository 인스턴스를 받음
 ```
 
-의존성 주입의 방법
-- 생성자 주입
-- setter 주입
+### 의존성 주입의 방법
 
+1. 필드 주입 (Field Injection)
+```
+@Service
+public class UserService {
+    @Autowired
+    private UserRepository userRepository;
+    
+    @Autowired
+    private EmailService emailService;
+    
+    public void createUser() {
+        userRepository.save();
+        emailService.send();
+    }
+}
+```
+**특징**
 
+- 코드가 간결함
+- 과거에 많이 사용됨
+- 스프링에서만 동작 (순수 자바로는 테스트 불가)
+
+2. 수정자(Setter) 주입
+```
+@Service
+public class UserService {
+    private UserRepository userRepository;
+    private EmailService emailService;
+    
+    @Autowired
+    public void setUserRepository(UserRepository userRepository) {
+        this.userRepository = userRepository;
+    }
+    
+    @Autowired
+    public void setEmailService(EmailService emailService) {
+        this.emailService = emailService;
+    }
+}
+```
+**특징**
+
+- 선택적 의존성에 사용
+- 의존성을 나중에 변경 가능 (가변)
+- 의존성 없이도 객체 생성 가능
+
+3. 생성자 주입 (Constructor Injection) ⭐ 권장
+```
+@Service
+public class UserService {
+    private final UserRepository userRepository;
+    private final EmailService emailService;
+    
+    // @Autowired 생략 가능 (생성자가 하나일 때)
+    public UserService(UserRepository userRepository, EmailService emailService) {
+        this.userRepository = userRepository;
+        this.emailService = emailService;
+    }
+}
+```
+
+| 측면 | 필드 주입 | Setter 주입 | 생성자 주입 |
+| --- | --- | --- | --- |
+| 불변성 | ❌ final 불가 | ❌ final 불가 | ✅ final 가능 |
+| 필수 의존성 표현 | ❌ 불명확 | ❌ 선택적 | ✅ 명확 |
+| 순환 참조 감지 | ❌ 런타임 | ❌ 런타임 | ✅ 시작 시점 |
+| 테스트 용이성 | ❌ 스프링 필요 | △ 가능하나 복잡 | ✅ 순수 자바 |
+| NPE 방지 | ❌ 위험 | ❌ 위험 | ✅ 안전 |
+| SRP 위반 감지 | ❌ 어려움 | ❌ 어려움 | ✅ 쉬움 |
