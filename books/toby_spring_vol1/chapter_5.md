@@ -95,3 +95,93 @@ public void upgradeLevels() throw Excetpion {
 - `RuntimeException` 만을 롤백하기 때문에 `RuntimeException` 을 상속하지 않는 예외가 발생했을 때는 롤백되지 않는 점을 유의해야 합니다.
 - 예외를 `try ~ catch` 로 잡는다면 롤백되지 않는다 반드시 잡은 에러를 다시 던져줘야 롤백이 동작한다.
 - @Async 를 사용한 비동기는 또 다른 스레드를 사용하기 때문에 `ThreadLocal` 의 커넥션에 접근하지 못해 트랜잭션이 정상적으로 동작하지 않습니다.
+
+**self-invocation 문제**
+
+이 문제는 메소드에서 동일한 클래스의 메소드를 호출할 때 내부 메소드에 선언된 트랜잭션이 정상적으로 동작하지 않는 문제다.
+
+```java
+@Service
+public class OrderService {
+    
+    public void processOrder(Order order) {
+        validateOrder(order);
+        saveOrder(order);  // ← 여기가 문제!
+    }
+    
+    @Transactional
+    public void saveOrder(Order order) {
+        orderRepository.save(order);
+    }
+}
+```
+
+해당 문제는 트랜잭션 어노테이션이 프록시를 기반으로 동작하기 떄문에 발생하는 문제이다. 
+
+그렇다면 프록시는 어떻게 구현하길래 이와 같은 문제가 발생하는 걸까?
+
+```java
+public class OrderServiceProxy extends OrderService {
+    
+    private OrderService target;  // 실제 OrderService 객체
+    private TransactionManager txManager;
+    
+    @Override
+    public void processOrder(Order order) {
+        // @Transactional이 없으므로 그냥 호출
+        target.processOrder(order);
+    }
+    
+    @Override
+    public void saveOrder(Order order) {
+        // @Transactional이 있으므로 트랜잭션 처리
+        TransactionStatus status = txManager.getTransaction(...);
+        try {
+            target.saveOrder(order);
+            txManager.commit(status);
+        } catch (Exception e) {
+            txManager.rollback(status);
+            throw e;
+        }
+    }
+}
+```
+
+트랜잭션 어노테이션이 붙어있는 메소드가 있다면 클래스를 감싸는 프록시 객체를 생성해서 이를 통해 동작한다.
+
+프록시 객체는 내부에 트랜잭션을 관리하는 인터페이스를 인스턴스 변수로 가지고 트랜잭션 어노테이션이 붙어있는 메소드에 트랜잭션을 적용한다. 메소드마다 이를 적용하기 때문에 내부 메소드를 호출하는 부모 메소드에는 트랜잭션이 적용되지 않는다.
+
+이를 방지하기 위해서 단일 책임 원칙을 준수하도록 별도의 클래스로 분리하거나 하나의 트랜잭션으로 묶여야하는 메소드에 명확하게 트랜잭션을 적용하는 것이 필요하다.
+
+### 트랜잭션 전파 속성
+
+- `REQUIRED`(기본값) : 기존 트랜잭션이 있으면 참여, 없으면 새로 생성
+- `REQUIRES_NEW` : 항상 새로운 트랜잭션 생성
+- `NESTED` : 중첩 트랜잭션, 부모 트랜잭션의 일부지만 독립적으로 롤백 가능
+- `SUPPORTS` : 트랜잭션이 있으면 참여, 없어도 무방
+- `NOT_SUPPORTED` : 트랜잭션 없이 실행, 기존 트랜잭션 일시 중단 
+- `MANDATORY` : 반드시 트랜잭션이 있어야함, 기존 트랜잭션이 없으면 예외 발생 
+- `NEVER` : 트랜잭션이 있으면 예외 발생 
+
+### 트랜잭션 격리 수준
+
+| 격리 수준              | Dirty Read | Non-Repeatable Read | Phantom Read | 성능 | 사용 상황            |
+|----------------------|------------|---------------------|--------------|------|---------------------|
+| READ_UNCOMMITTED     |  발생    |  발생             |  발생      | 가장 좋음 | 거의 사용 안함       |
+| READ_COMMITTED       |  방지    |  발생             |  발생      | 좋음   | 일반적인 조회        |
+| REPEATABLE_READ      |  방지    |  방지             |  발생      | 보통     | 일관된 조회 필요시   |
+| SERIALIZABLE         |  방지    |  방지             |  방지      | 안좋음       | 절대적 일관성 필요시 
+
+
+> **readOnly 속성** 
+>
+> 1. 성능 최적화
+> - Hibernate flush 모드 MANUAL 설정 -> 더티 체킹 생략
+> - DB 에 읽기 전용 힌트 전달 -> 불필요한 잠금 회피 
+>
+> 2. 안전성
+> - 실수로 데이터 수정해도 반영 안됨 
+> - 읽기 전용 의도 명확히 표현
+>
+> 3. DB 라우팅
+> - 읽기 전용 Replica DB 로 자동 라우팅 기능
