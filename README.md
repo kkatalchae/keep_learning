@@ -7,7 +7,7 @@
 ### study_list
 
 - Books
-  - [Effective Java]https://ebook-product.kyobobook.co.kr/dig/epd/ebook/E000003160832)
+  - [Effective Java](https://ebook-product.kyobobook.co.kr/dig/epd/ebook/E000003160832)
   - [토비의 스프링 3.1 Vol.1 스프링의 이해와 원리](https://ridibooks.com/books/3984000001?_s=search&_q=%ED%86%A0%EB%B9%84%EC%9D%98+%EC%8A%A4%ED%94%84%EB%A7%81&_rdt_sid=SearchBookListWithTab) (진행중)
 - Spring 
   - [Bean Scope](https://github.com/kkatalchae/keep_learning/blob/main/spring/spring_scope.md)
