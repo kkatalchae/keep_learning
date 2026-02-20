@@ -3,6 +3,10 @@
 ### to_study_list
 - [클린 코드](https://ebook-product.kyobobook.co.kr/dig/epd/ebook/E000003160816)
 - AWS Solution Architect Associate 
+- OAuth2.0
+- OIDC
+- JPA
+- SAML
 
 ### study_list
 
